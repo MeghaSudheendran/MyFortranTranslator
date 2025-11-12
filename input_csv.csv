@@ -1,0 +1,25 @@
+legacy_code,mistral _translated_code,mistral _translated_score,qwen _translated_code,qwen _translated_score
+"c adjust the array of borrowed books 
+do 
+jr = ir , ubbcnt - 1 
+ur.ubb(jr) = ur.ubb(jr + 1) 
+end do 
+ubbcnt = ubbcnt - 1 
+segadj, ur segdes, ur*MOD",,,,
+"integer iur
+c see whether the user exists in the structure       
+       iur = fndur(lib, name)
+       if (iur .eq. 0) then 
+         write(*,*) 'cannot find user ', name
+         return
+       endif 
+       write(*,*) 'borbk: iur =', iur
+",,,,
+"integer ibk
+c see whether the book exists in the structure       
+       ibk = fndbk(lib, title)
+       if (ibk .eq. 0) then 
+         write(*,*) 'cannot find book ', title
+         return
+       endif 
+       write(*,*) 'borbk: ibk=', ibk",,,,

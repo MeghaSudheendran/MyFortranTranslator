@@ -1,0 +1,10 @@
+# requirements.txt
+
+# For making HTTP requests to the vLLM API
+requests>=2.28.0
+
+# Optional: For more robust CSV handling if needed (though Python's built-in csv is often sufficient)
+# pandas>=1.5.0  # Uncomment if you prefer pandas for CSV I/O
+
+# Optional: For environment variable management if using python-dotenv
+# python-dotenv>=0.19.0 # Uncomment if you want to load .env files in Python

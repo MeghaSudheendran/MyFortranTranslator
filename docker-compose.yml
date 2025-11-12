@@ -1,0 +1,32 @@
+name: vllm-openwebui-remote
+
+services:
+  vllm:
+    image: vllm/vllm-openai:latest
+    environment:
+      - VLLM_API_KEY=${VLLM_API_KEY}
+      - MODEL_ID=${MODEL_ID}
+      - TP_SIZE=${TP_SIZE}
+      - MAX_LEN=${MAX_LEN}
+    volumes:
+      - /tmp/hf-cache:/root/.cache/huggingface/
+    ports:
+      - "8000:8000"
+    command: [
+      "--model", "${MODEL_ID}",
+      "--tensor-parallel-size", "${TP_SIZE}",
+      "--max-model-len", "${MAX_LEN}"
+    ]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
+    networks:
+      - default
+
+networks:
+  default:
+    driver: bridge
