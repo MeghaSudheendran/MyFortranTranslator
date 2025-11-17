@@ -1,4 +1,4 @@
-# translate_fortran.py
+# translate_fortran.pyimport requests
 import requests
 import csv
 import time
@@ -9,14 +9,184 @@ import os
 # --- Configuration ---
 # Read API_URL from environment variable, default to localhost
 API_URL = os.getenv("API_URL", "http://localhost:8000/v1/chat/completions")
-MODEL = os.getenv("MODEL_ID", "codellama/CodeLlama-13b-Instruct-hf")
+MODEL = os.getenv("MODEL_ID", "")
+PROMPT2 = """
+You are an exceptionally intelligent coding assistant specializing in code translation, particularly from Fortran 77 to Fortran 2008. You consistently deliver accurate and reliable translations while maintaining the original code's functionality and structure.
+Please translate this Fortran 77 to Fortran 2008. Follow these guidelines:
+Maintain the overall structure and functionality of the original code.
+Use Fortran 2008 practices and idioms where appropriate.
+Ensure that all functions, subroutines, and modules are properly translated to their Fortran 2008 equivalents.
+Pay attention to traits of Fortran 2008 such as Coarrays, Submodules, DO CONCURRENT, Enhanced C interoperability
+Include any necessary Fortran 2008 libraries or headers.
+Add comments to explain any significant changes or non-trivial translations.
+Please return the translated Fortran 2008 code in one code block.
+Please restrict your output to the translated code only.
 
-SYSTEM_PROMPT = """You are a Fortran code translator. Convert legacy Fortran code to modern Fortran standards. 
-         Return ONLY the translated code without any explanations, comments, or wrapper text. 
-         Use modules, explicit typing with IMPLICIT NONE, modern array syntax, and modern control structures. 
-         Maintain the original functionality while making the code more readable and maintainable.
-         Do not include any markdown formatting, backticks, or introductory text. 
-         Output only the Fortran code itself."""
+Examples:
+
+Input (ESOPE):
+#include "PSTR.inc"
+#include "tlib.seg"
+integer :: brcnt
+integer :: urcnt
+! [ooo] #end-include tlib.seg
+#include "book.seg”
+
+Output (Fortran 90+):
+! [ooo] empty #include PSTR.inc
+! [ooo] #include tlib.seg
+integer :: brcnt
+integer :: urcnt
+! [ooo] #end-include tlib.seg
+! [ooo] empty #include book.seg
+
+Input (ESOPE):
+pointeur lib.pstr
+pointeur bk.book
+pointeur lb.tlib
+pointeur ur.user
+
+Output (Fortran 90+):
+type(str),  pointer, intent(inOut) :: lib
+type(book), pointer :: bk
+type(tlib), pointer :: lb
+type(user), pointer :: ur
+
+Input (ESOPE):
+ur = mypnt(lib, lb.uref(iur))    
+segact, ur
+
+Output (Fortran 90+):
+ur => user_mypnt(lib, lb % uref(iur))
+! [ooo].obsolete: segact, ur
+
+Input (ESOPE):
+ubbcnt = ur.ubb(/1)
+ubbcnt = ubbcnt + 1
+segadj, ur
+ur.ubb(ubbcnt) = ibk  
+     
+Output (Fortran 90+):
+ubbcnt = size(ur % ubb, 1)
+ubbcnt = ubbcnt + 1
+call segadj(ur, ubbcnt)
+ur % ubb(ubbcnt) = ibk
+
+Input (ESOPE):
+segini, bk
+bk.btitle = title
+bk.bpages = pages
+bk.budc   = udc
+segdes, bk*MOD
+
+Output (Fortran 90+):
+call segini(bk)
+bk % btitle = title
+bk % bpages = pages
+bk % budc   = udc
+! [ooo].obsolete: segdes, bk
+
+Input (ESOPE):
+integer libeta
+call oooeta(lib, libeta)
+call actstr(lib)
+if(libeta.ne.1) call desstr(lib,'MOD')
+
+Output (Fortran 90+):
+! [ooo].not-used: integer :: libeta
+! [ooo].obsolete: call oooeta(lib, libeta)
+! [ooo].obsolete: call actstr(lib)
+! [ooo].empty-var: if (libeta /= 1) ! [ooo].obsolete: call desstr(lib,'MOD')
+
+
+ """
+PROMPT3 = """
+Translate fortran77 that contains ESOPE code to fortran 2008.
+
+Examples:
+
+Input (ESOPE):
+#include "PSTR.inc"
+#include "tlib.seg"
+integer :: brcnt
+integer :: urcnt
+! [ooo] #end-include tlib.seg
+#include "book.seg”
+
+Output (Fortran 90+):
+! [ooo] empty #include PSTR.inc
+! [ooo] #include tlib.seg
+integer :: brcnt
+integer :: urcnt
+! [ooo] #end-include tlib.seg
+! [ooo] empty #include book.seg
+
+Input (ESOPE):
+pointeur lib.pstr
+pointeur bk.book
+pointeur lb.tlib
+pointeur ur.user
+
+Output (Fortran 90+):
+type(str),  pointer, intent(inOut) :: lib
+type(book), pointer :: bk
+type(tlib), pointer :: lb
+type(user), pointer :: ur
+
+Input (ESOPE):
+ur = mypnt(lib, lb.uref(iur))    
+segact, ur
+
+Output (Fortran 90+):
+ur => user_mypnt(lib, lb % uref(iur))
+! [ooo].obsolete: segact, ur
+
+Input (ESOPE):
+ubbcnt = ur.ubb(/1)
+ubbcnt = ubbcnt + 1
+segadj, ur
+ur.ubb(ubbcnt) = ibk  
+     
+Output (Fortran 90+):
+ubbcnt = size(ur % ubb, 1)
+ubbcnt = ubbcnt + 1
+call segadj(ur, ubbcnt)
+ur % ubb(ubbcnt) = ibk
+
+Input (ESOPE):
+segini, bk
+bk.btitle = title
+bk.bpages = pages
+bk.budc   = udc
+segdes, bk*MOD
+
+Output (Fortran 90+):
+call segini(bk)
+bk % btitle = title
+bk % bpages = pages
+bk % budc   = udc
+! [ooo].obsolete: segdes, bk
+
+Input (ESOPE):
+integer libeta
+call oooeta(lib, libeta)
+call actstr(lib)
+if(libeta.ne.1) call desstr(lib,'MOD')
+
+Output (Fortran 90+):
+! [ooo].not-used: integer :: libeta
+! [ooo].obsolete: call oooeta(lib, libeta)
+! [ooo].obsolete: call actstr(lib)
+! [ooo].empty-var: if (libeta /= 1) ! [ooo].obsolete: call desstr(lib,'MOD')
+
+
+
+
+ """
+SYSTEM_PROMPT = PROMPT3 
+
+
+
 # --- End Configuration ---
 
 def extract_code_from_response(response_text):
@@ -41,7 +211,7 @@ def translate_code(code_snippet, max_retries=3, delay=1):
         "model": MODEL,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"Translate this legacy Fortran code to modern Fortran:\n{code_snippet}"}
+            {"role": "user", "content": f"Translate this legacy Fortran code to modern Fortran:(Give me code only, without any explanation) \n{code_snippet}"}
         ],
         "temperature": 0.1,
         "max_tokens": 2048
@@ -126,7 +296,7 @@ if __name__ == "__main__":
     parser.add_argument('input_csv', help='Path to the input CSV file')
     parser.add_argument('output_csv', help='Path to the output CSV file')
     parser.add_argument('--legacy-col', default='legacy_code', help='Name of the column containing legacy code (default: legacy_code)')
-    parser.add_argument('--translated-col', default='mistral_translated_code', help='Name of the column to store translated code (default: mistral_translated_code)')
+    parser.add_argument('--translated-col', default='qwen_translated_code', help='Name of the column to store translated code (default: mistral_translated_code)')
 
     args = parser.parse_args()
 
