@@ -10,180 +10,149 @@ import os
 # Read API_URL from environment variable, default to localhost
 API_URL = os.getenv("API_URL", "http://localhost:8000/v1/chat/completions")
 MODEL = os.getenv("MODEL_ID", "")
-PROMPT2 = """
-You are an exceptionally intelligent coding assistant specializing in code translation, particularly from Fortran 77 to Fortran 2008. You consistently deliver accurate and reliable translations while maintaining the original code's functionality and structure.
-Please translate this Fortran 77 to Fortran 2008. Follow these guidelines:
-Maintain the overall structure and functionality of the original code.
-Use Fortran 2008 practices and idioms where appropriate.
-Ensure that all functions, subroutines, and modules are properly translated to their Fortran 2008 equivalents.
-Pay attention to traits of Fortran 2008 such as Coarrays, Submodules, DO CONCURRENT, Enhanced C interoperability
-Include any necessary Fortran 2008 libraries or headers.
-Add comments to explain any significant changes or non-trivial translations.
-Please return the translated Fortran 2008 code in one code block.
-Please restrict your output to the translated code only.
 
-Examples:
 
-Input (ESOPE):
-#include "PSTR.inc"
-#include "tlib.seg"
-integer :: brcnt
-integer :: urcnt
-! [ooo] #end-include tlib.seg
-#include "book.seg”
+SYSTEM_PROMPT = """
+You are given Fortran 77 code that may contain ESOPE extensions.
+ESOPE is an extension of Fortran designed for structured memory management, based on the concept of segments (SEGMENT, SEGINI, SEGACT, SEGDES, SEGSUP, SEGADJ, etc.) and pointers (POINTEUR).
+The goal is to translate this legacy ESOPE-Fortran code into modern Fortran (Fortran 2008).
+You must follow the strict translation rules and patterns demonstrated in the examples below.
+Translation Rules
+1. Module and Procedure Structure
+Module Creation: A standalone SUBROUTINE or FUNCTION (e.g., subroutine newbk) must be converted into a MODULE(e.g., module newbk_mod).
+Contains: The original procedure must be placed inside the CONTAINS section of the new module.
+Implicit Typing: IMPLICIT NONE must be enforced in all modules and procedures.
+2. Declarations and Dependencies
+external to use: An external <name> declaration (and its associated type declaration, e.g., integer fndbk) must be replaced with a USE statement (e.g., use :: fndbk_mod).
+POINTEUR:
+pointeur lib.PSTR → type(str), pointer :: lib
+pointeur <var>.<seg> → type(<seg>), pointer :: <var>
+INTENT: All procedure arguments must be given an INTENT attribute (e.g., intent(in), intent(out), intent(inout)).
+For POINTEUR arguments that are initialized or modified, intent(inout) is appropriate.
+Includes:
+#include "PSTR.inc" → ! [ooo] empty #include PSTR.inc
+#include "tlib.seg" → Keep the include comments, but add local declarations for the segment's members (e.g., integer :: brcnt, integer :: urcnt).
+3. ESOPE Command and Syntax Translation
+Pointer Access: Convert ESOPE dot-notation to standard Fortran percent-notation.
+lb.bref → lb % bref
+Array Sizing: Convert ESOPE slash-notation to the SIZE intrinsic.
+lb.bref(/1) → size(lb % bref, 1)
+mypnt Function: Convert the generic mypnt call to a typed pointer assignment (=>) using the specific function for that type.
+lb = mypnt(lib,1) → lb => tlib_mypnt(lib, 1)
+ur = mypnt(lib, lb.uref(iur)) → ur => user_mypnt(lib, lb % uref(iur))
+Memory Allocation (segini): The segini macro must be translated to a subroutine call that explicitly passes the segment's dimensioning variables.
+segini, ur → call segini(ur, ubbcnt)
+Memory Resizing (segadj): The segadj macro must also be translated to a call passing the new dimensioning variables.
+segadj, ur → call segadj(ur, ubbcnt)
+segadj, lb → call segadj(lb, brcnt, urcnt)
+4. Obsolete and Unused Code
+Obsolete Macros: All obsolete memory/state management macros must be commented out and tagged ! [ooo].obsolete:. This includes:
+call oooeta(...)
+call actstr(...)
+segact ...
+segdes ...
+call desstr(...)
+Unused Variables: If an ESOPE bookkeeping variable (like libeta) becomes unused after translation, mark its declaration with ! [ooo].not-used:.
 
-Output (Fortran 90+):
-! [ooo] empty #include PSTR.inc
-! [ooo] #include tlib.seg
-integer :: brcnt
-integer :: urcnt
-! [ooo] #end-include tlib.seg
-! [ooo] empty #include book.seg
+Example 1 ESOPE+Fortran:
+c arguments
+      pointeur lib.pstr
+      character*(*) title
+c local variables
+      pointeur bk.book
 
-Input (ESOPE):
-pointeur lib.pstr
-pointeur bk.book
-pointeur lb.tlib
-pointeur ur.user
-
-Output (Fortran 90+):
-type(str),  pointer, intent(inOut) :: lib
+Example 1 Fortran 2008:
+! arguments
+type(str), pointer, intent(in) :: lib
+character(len=*), intent(in) :: title
+! local variables
 type(book), pointer :: bk
-type(tlib), pointer :: lb
-type(user), pointer :: ur
 
-Input (ESOPE):
-ur = mypnt(lib, lb.uref(iur))    
-segact, ur
+Example 2 ESOPE+Fortran:
+subroutine borbk(lib, name, title)
+       implicit none
+#include "PSTR.inc"
+c external functions
+       external fndbk 
+       integer fndbk
 
-Output (Fortran 90+):
-ur => user_mypnt(lib, lb % uref(iur))
-! [ooo].obsolete: segact, ur
+Example 2 Fortran 2008:
+module borbk_mod
+  use :: str_mod
+  use :: fndur_mod
+  use :: fndbk_mod
+  ...
+  implicit none
+contains
+  subroutine borbk(lib, name, title)
+    ! [ooo] empty #include PSTR.inc
+    ! external functions
 
-Input (ESOPE):
+
+Example 3 ESOPE+Fortran:
+bk = mypnt(lib, lb.bref(ibk2))
+segact, bk
+
+Example 3 Fortran 2008:
+bk => book_mypnt(lib, lb % bref(ibk2))
+! [ooo].obsolete: segact,bk
+
+
+Example 4 ESOPE+Fortran:
+brcnt = lb.bref(/1)
+
+Example 4 Fortran 2008:
+brcnt = size(lb % bref, 1)
+
+Example 5 ESOPE+Fortran:
+title2 = bk.btitle
+segdes, bk*NOMOD
+
+Example 5 Fortran 2008:
+title2 = bk % btitle
+! [ooo].obsolete: segdes,bk
+
+
+Example 6 ESOPE+Fortran:
 ubbcnt = ur.ubb(/1)
 ubbcnt = ubbcnt + 1
 segadj, ur
-ur.ubb(ubbcnt) = ibk  
-     
-Output (Fortran 90+):
+ur.ubb(ubbcnt) = ibk
+
+Example 6 Fortran 2008:
 ubbcnt = size(ur % ubb, 1)
 ubbcnt = ubbcnt + 1
 call segadj(ur, ubbcnt)
 ur % ubb(ubbcnt) = ibk
 
-Input (ESOPE):
-segini, bk
-bk.btitle = title
-bk.bpages = pages
-bk.budc   = udc
-segdes, bk*MOD
 
-Output (Fortran 90+):
-call segini(bk)
-bk % btitle = title
-bk % bpages = pages
-bk % budc   = udc
-! [ooo].obsolete: segdes, bk
+Example 7 ESOPE+Fortran:
+c local variables    
+      integer libeta
+...
+      call oooeta(lib, libeta)
+      call actstr(lib)
+...
+c deactivate the structure if activated on entry
+      if(libeta.ne.1) call desstr(lib,'MOD')
 
-Input (ESOPE):
-integer libeta
-call oooeta(lib, libeta)
-call actstr(lib)
-if(libeta.ne.1) call desstr(lib,'MOD')
-
-Output (Fortran 90+):
-! [ooo].not-used: integer :: libeta
-! [ooo].obsolete: call oooeta(lib, libeta)
-! [ooo].obsolete: call actstr(lib)
-! [ooo].empty-var: if (libeta /= 1) ! [ooo].obsolete: call desstr(lib,'MOD')
+Example 7 Fortran 2008:
+! local variables    
+    ! [ooo].not-used: integer :: libeta
+...
+    ! [ooo].obsolete: call oooeta(lib,libeta)
+    ! [ooo].obsolete: call actstr(lib)
+...
+    ! deactivate the structure if activated on entry
+    ! [ooo].empty-var: if (libeta /= 1) ! [ooo].obsolete: call desstr(lib,'MOD')
 
 
- """
-PROMPT3 = """
-Translate fortran77 that contains ESOPE code to fortran 2008.
+Example 8 ESOPE+Fortran:
+if (title2 .eq. title1) then
+Example 8 Fortran 2008:
+if (title2 == title1) then
 
-Examples:
-
-Input (ESOPE):
-#include "PSTR.inc"
-#include "tlib.seg"
-integer :: brcnt
-integer :: urcnt
-! [ooo] #end-include tlib.seg
-#include "book.seg”
-
-Output (Fortran 90+):
-! [ooo] empty #include PSTR.inc
-! [ooo] #include tlib.seg
-integer :: brcnt
-integer :: urcnt
-! [ooo] #end-include tlib.seg
-! [ooo] empty #include book.seg
-
-Input (ESOPE):
-pointeur lib.pstr
-pointeur bk.book
-pointeur lb.tlib
-pointeur ur.user
-
-Output (Fortran 90+):
-type(str),  pointer, intent(inOut) :: lib
-type(book), pointer :: bk
-type(tlib), pointer :: lb
-type(user), pointer :: ur
-
-Input (ESOPE):
-ur = mypnt(lib, lb.uref(iur))    
-segact, ur
-
-Output (Fortran 90+):
-ur => user_mypnt(lib, lb % uref(iur))
-! [ooo].obsolete: segact, ur
-
-Input (ESOPE):
-ubbcnt = ur.ubb(/1)
-ubbcnt = ubbcnt + 1
-segadj, ur
-ur.ubb(ubbcnt) = ibk  
-     
-Output (Fortran 90+):
-ubbcnt = size(ur % ubb, 1)
-ubbcnt = ubbcnt + 1
-call segadj(ur, ubbcnt)
-ur % ubb(ubbcnt) = ibk
-
-Input (ESOPE):
-segini, bk
-bk.btitle = title
-bk.bpages = pages
-bk.budc   = udc
-segdes, bk*MOD
-
-Output (Fortran 90+):
-call segini(bk)
-bk % btitle = title
-bk % bpages = pages
-bk % budc   = udc
-! [ooo].obsolete: segdes, bk
-
-Input (ESOPE):
-integer libeta
-call oooeta(lib, libeta)
-call actstr(lib)
-if(libeta.ne.1) call desstr(lib,'MOD')
-
-Output (Fortran 90+):
-! [ooo].not-used: integer :: libeta
-! [ooo].obsolete: call oooeta(lib, libeta)
-! [ooo].obsolete: call actstr(lib)
-! [ooo].empty-var: if (libeta /= 1) ! [ooo].obsolete: call desstr(lib,'MOD')
-
-
-
-
- """
-SYSTEM_PROMPT = PROMPT3 
+""" 
 
 
 
@@ -211,7 +180,7 @@ def translate_code(code_snippet, max_retries=3, delay=1):
         "model": MODEL,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"Translate this legacy Fortran code to modern Fortran:(Give me code only, without any explanation) \n{code_snippet}"}
+            {"role": "user", "content": f"Translate this legacy Fortran code to modern Fortran:(Give me only translated code without explanation like a text) \nLegacy Code:{code_snippet}"}
         ],
         "temperature": 0.1,
         "max_tokens": 2048
@@ -236,7 +205,7 @@ def translate_code(code_snippet, max_retries=3, delay=1):
             print(f"Unexpected response format: {response.text}")
             return f"Error: Unexpected response format"
 
-def process_csv(input_file, output_file, legacy_col='legacy_code', translated_col='mistral_translated_code'):
+def process_csv(input_file, output_file, legacy_col='legacy_code', translated_col='translated_code'):
     """
     Reads the input CSV, translates the legacy_code column,
     and writes the result to the output CSV with updated translated_code column.
