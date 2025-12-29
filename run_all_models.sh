@@ -1,122 +1,170 @@
 #!/bin/bash
-echo "Checking Docker status..."
-if ! docker ps > /dev/null 2>&1; then
-    echo "Docker is down. Applying Grid'5000 /tmp storage fix..."
-    g5k-setup-nvidia-docker -t
-    sudo systemctl stop docker
-    sudo systemctl stop containerd
-    
-    
-    # Set root to /tmp if not already set
-    sudo sed -i 's|^#*root =.*|root = "/tmp/containerd-data"|' /etc/containerd/config.toml
-    sudo systemctl restart containerd
-    sudo systemctl restart docker   
+set -e
+
+############################################
+# STEP 1: Grid'5000 NVIDIA Docker setup
+############################################
+
+echo "[STEP 1] Running g5k-setup-nvidia-docker..."
+g5k-setup-nvidia-docker -t
+
+############################################
+# STEP 2: Stop docker and containerd
+############################################
+
+echo "[STEP 2] Stopping docker and containerd..."
+sudo systemctl stop docker
+sudo systemctl stop containerd
+
+# Ensure processes are fully stopped
+sudo pkill -f containerd || true
+sudo pkill -f dockerd || true
+sleep 3
+
+############################################
+# STEP 3: Edit containerd root (uncomment and update existing line)
+############################################
+
+echo "[STEP 3] Updating containerd root to /tmp/containerd-data..."
+CONTAINERD_CONFIG="/etc/containerd/config.toml"
+
+# Create backup
+sudo cp "$CONTAINERD_CONFIG" "$CONTAINERD_CONFIG.backup.$(date +%s)" 2>/dev/null || true
+
+# Uncomment and update the root line if it exists
+sudo sed -i 's|^#root =.*|root = "/tmp/containerd-data"|' "$CONTAINERD_CONFIG"
+
+# If there's no commented root line, add it to the cri plugin section
+if ! sudo grep -q '^root = "/tmp/containerd-data"' "$CONTAINERD_CONFIG"; then
+    # Remove any existing root lines and add to cri plugin section
+    sudo sed -i '/^root = /d' "$CONTAINERD_CONFIG"
+    if sudo grep -q "\[plugins\.\"io\.containerd\.grpc\.v1\.cri\"\]" "$CONTAINERD_CONFIG"; then
+        sudo sed -i '/\[plugins\."io\.containerd\.grpc\.v1\.cri"\]/a root = "/tmp/containerd-data"' "$CONTAINERD_CONFIG"
+    else
+        echo -e '\n[plugins."io.containerd.grpc.v1.cri"]\nroot = "/tmp/containerd-data"' | sudo tee -a "$CONTAINERD_CONFIG" > /dev/null
+    fi
 fi
 
+# Ensure the directory exists
+sudo mkdir -p /tmp/containerd-data
+
+# Verify the change
+if sudo grep -q 'root = "/tmp/containerd-data"' "$CONTAINERD_CONFIG"; then
+    echo "✓ Containerd root successfully set to /tmp/containerd-data"
+else
+    echo "✗ Failed to set containerd root"
+    exit 1
+fi
+
+############################################
+# STEP 4: Restart containerd and docker
+############################################
+
+echo "[STEP 4] Restarting containerd..."
+sudo systemctl daemon-reload
+sudo systemctl restart containerd
+sleep 3
+systemctl status containerd --no-pager
+
+echo "[STEP 5] Restarting docker..."
+# Reset failed state before restarting
+sudo systemctl reset-failed docker
+sudo systemctl restart docker
+sleep 3
+systemctl status docker --no-pager
+
+############################################
+# STEP 6: Start docker compose
+############################################
+
+echo "[STEP 6] Starting docker compose..."
+docker compose up -d
 
 
-
-# --- 3. Experiment Configuration ---
-# List of models to experiment on
 MODELS=(
-   	"codellama/CodeLlama-7b-Instruct-hf"
-	"codellama/CodeLlama-13b-Instruct-hf"
-   	"mistralai/Mistral-7B-Instruct-v0.3"
-    	"Qwen/Qwen2-7B-Instruct"
-	"Qwen/Qwen2.5-Coder-3B"
-	"Qwen/Qwen2.5-Coder-7B-Instruct"
-	"Qwen/Qwen2.5-Coder-7B"
-	"Qwen/Qwen2.5-Coder-14B-Instruct"
-	"Qwen/Qwen2.5-Coder-14B"
-	"Qwen/Qwen3-Coder-30B-A3B-Instruct"
-	"Qwen/Qwen2.5-Coder-32B-Instruct"
-	"Qwen/Qwen2.5-Coder-32B"
+    "microsoft/phi-4"
+    
 )
 
-# Fixed settings
 TP_SIZE=4
 MAX_LEN=8192
 INPUT_CSV="input.csv"
 FINAL_RESULTS="final_experiment_results.csv"
 
-# --- Setup ---
-# Initialize the final file with the content of the input file
+############################################
+# 3. Input validation
+############################################
+
 if [ ! -f "$INPUT_CSV" ]; then
-    echo "Error: $INPUT_CSV not found! Please provide an input file."
+    echo "Error: $INPUT_CSV not found!"
     exit 1
 fi
 
 echo "Initializing $FINAL_RESULTS from $INPUT_CSV..."
 cp "$INPUT_CSV" "$FINAL_RESULTS"
 
-# Function to wait for vLLM to fully load the model
+############################################
+# 4. vLLM health check function
+############################################
+
 wait_for_vllm() {
-    echo "Waiting for vLLM to load the model (Health Check)..."
     local url="http://localhost:8000/health"
     local retries=0
-    local max_retries=90 # Wait up to 15 minutes (90 * 10s) for large models
+    local max_retries=90
 
-    until curl -s -f "$url" > /dev/null; do
+    echo "Waiting for vLLM to load..."
+    until curl -sf "$url" > /dev/null; do
         sleep 10
-        ((retries++))
-        if [ $retries -ge $max_retries ]; then
-            echo "Error: vLLM failed to become ready after 15 minutes."
+        retries=$((retries + 1))
+        echo -n "."
+        if [ "$retries" -ge "$max_retries" ]; then
+            echo
+            echo "ERROR: vLLM failed to start."
             return 1
         fi
-        echo -n "."
     done
-    echo " vLLM is ready!"
+    echo
+    echo "vLLM is ready."
     return 0
 }
 
-# --- Main Loop ---
+############################################
+# 5. Main experiment loop
+############################################
+
 for MODEL_ID in "${MODELS[@]}"; do
     echo "========================================================"
     echo "Starting experiment for: $MODEL_ID"
     echo "========================================================"
 
-    # 1. Generate a sanitized name for the column (no / or -)
-    # Using underscores to match your required header format
-# This is what I used in the updated script I gave you
     SAFE_NAME=$(echo "$MODEL_ID" | sed 's/[\/\.-]/_/g')
     COL_NAME="output_${SAFE_NAME}"
 
-    # 2. Overwrite .env file dynamically for Docker Compose
-    echo "Generating .env for $MODEL_ID..."
+    echo "Generating .env..."
     cat > .env <<EOF
 MODEL_ID=$MODEL_ID
 TP_SIZE=$TP_SIZE
 MAX_LEN=$MAX_LEN
 EOF
 
-    # 3. Restart Docker Container
     echo "Restarting Docker containers..."
-    docker compose down
+    docker compose down || true
     docker compose up -d
 
-    # 4. Wait for the server to be ready
     if ! wait_for_vllm; then
-        echo "Skipping $MODEL_ID due to server failure."
+        echo "Skipping $MODEL_ID"
         continue
     fi
 
-    # 5. Run the translation script
-    # We use FINAL_RESULTS as both input and output to append columns
-    echo "Running translation script for column: $COL_NAME"
-
-    # We call the script directly or via make.
-    # Passing the same file to input and output allows the Python script to update it.
+    echo "Running translation for $COL_NAME"
     python3 translate_fortran.py "$FINAL_RESULTS" "$FINAL_RESULTS" \
         --legacy-col "legacy_code" \
         --translated-col "$COL_NAME"
 
-    echo "Finished $MODEL_ID. Updated $FINAL_RESULTS"
-
-    # Optional: Clean up docker logs/cache if disk space is an issue
-    # docker system prune -f
+    echo "Completed $MODEL_ID"
 done
 
 echo "========================================================"
 echo "All experiments complete."
-echo "Final consolidated results: $FINAL_RESULTS"
+echo "Results saved in $FINAL_RESULTS"
 echo "========================================================"

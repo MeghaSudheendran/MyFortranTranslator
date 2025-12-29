@@ -203,105 +203,83 @@ def translate_code(code_snippet, max_retries=3, delay=1):
             print(f"Unexpected response format: {response.text}")
             return f"Error: Unexpected response format"
 
-PHARO_URL = "http://localhost:8080/chrf"
 
-def get_chrf_score(candidate, reference):
-    """Calls the Pharo API to get the ChRF score."""
-    if not candidate or not reference:
-        return 0.0
-    
-    payload = {
-        "candidates": [candidate],
-        "references": [[reference]] # Pharo expects list of lists
-    }
-    try:
-        # Timeout of 2 seconds to keep the loop moving
-        response = requests.post(PHARO_URL, json=payload, timeout=2)
-        if response.status_code == 200:
-            return response.json().get('chrf_score', -1.0)
-    except Exception as e:
-        print(f"  [Scoring Error] Pharo not responding: {e}")
-    return -1.0
-
-def process_csv(input_file, output_file, legacy_col, translated_col):
-    rows = []
-    with open(input_file, 'r', newline='', encoding='utf-8') as f:
-        reader = csv.DictReader(f, delimiter=';')
-        fieldnames = list(reader.fieldnames)
-        rows = list(reader)
-
-    score_col = f"{translated_col}_score"
-    if translated_col not in fieldnames: fieldnames.append(translated_col)
-    if score_col not in fieldnames: fieldnames.append(score_col)
-
-    for row in rows:
-        legacy = row.get(legacy_col, '')
-        ref = row.get('Reference', '') # Ensure column name matches exactly
-        
-        if legacy:
-            print(f"Translating and Scoring...")
-            # 1. Translate via vLLM
-            translation = translate_code(legacy) 
-            # 2. Score via Pharo
-            score = get_chrf_score(translation, ref)
-            
-            row[translated_col] = translation
-            row[score_col] = str(score)
-
-    with open(output_file, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=';')
-        writer.writeheader()
-        writer.writerows(rows)
-
-
-#def process_csv(input_file, output_file, legacy_col='legacy_code', translated_col='translated_code'):
- #   print(f"Loading: {input_file} (Delimiter: ;)")
-    
-  #  rows = []
-   # fieldnames = []
-    
-#    with open(input_file, 'r', newline='', encoding='utf-8') as infile:
-#        # We specify delimiter=';' to match your file format
-#        reader = csv.DictReader(infile, delimiter=';', restkey='extra_cols')
-#        fieldnames = list(reader.fieldnames) if reader.fieldnames else []
+#def process_csv(input_file, output_file, legacy_col, translated_col):
+#    rows = []
+#    with open(input_file, 'r', newline='', encoding='utf-8') as f:
+#        reader = csv.DictReader(f, delimiter=';')
+#        fieldnames = list(reader.fieldnames)
 #        rows = list(reader)
+#
+#   score_col = f"{translated_col}_score"
+#    if translated_col not in fieldnames: fieldnames.append(translated_col)
+#    if score_col not in fieldnames: fieldnames.append(score_col)
 
-    # Define the new columns
-#    score_col = f"{translated_col}_score"
-    
-    # Ensure new columns are in the fieldnames list
- #   if translated_col not in fieldnames:
-#        fieldnames.append(translated_col)
-#    if score_col not in fieldnames:
-#        fieldnames.append(score_col)
-
-#    for i, row in enumerate(rows):
-        # Safety: Clean up any dictionary keys that aren't strings
-        # This prevents the 'ValueError: ... None' crash
-#        keys_to_fix = [k for k in row.keys() if k is None or k == 'extra_cols']
-#        for k in keys_to_fix:
-#            del row[k]
-
-#        legacy_code = row.get(legacy_col, '')
+#    for row in rows:
+#        legacy = row.get(legacy_col, '')
+#        ref = row.get('Reference', '') # Ensure column name matches exactly
         
-#        if not legacy_code:
-#            row[translated_col] = ''
-#            row[score_col] = ''
-#            continue
+#       if legacy:
+#            print(f"Translating and Scoring...")
+            # 1. Translate via vLLM
+#            translation = translate_code(legacy) 
+            
+#            row[translated_col] = translation
 
-#        print(f"  [{i+1}/{len(rows)}] Translating for {translated_col}...")
-#        translated_code = translate_code(legacy_code)
-        
-#        row[translated_col] = translated_code
-#        row[score_col] = ""
-
-    # Write back using the same semicolon delimiter
-#    with open(output_file, 'w', newline='', encoding='utf-8') as outfile:
-#        writer = csv.DictWriter(outfile, fieldnames=fieldnames, delimiter=';', extrasaction='ignore')
+#    with open(output_file, 'w', newline='', encoding='utf-8') as f:
+#        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=';')
 #        writer.writeheader()
 #        writer.writerows(rows)
+
+
+def process_csv(input_file, output_file, legacy_col='legacy_code', translated_col='translated_code'):
+    print(f"Loading: {input_file} (Delimiter: ;)")
     
-#    print(f"Successfully updated {output_file}")
+    rows = []
+    fieldnames = []
+    
+    with open(input_file, 'r', newline='', encoding='utf-8') as infile:
+        # We specify delimiter=';' to match your file format
+        reader = csv.DictReader(infile, delimiter=';', restkey='extra_cols')
+        fieldnames = list(reader.fieldnames) if reader.fieldnames else []
+        rows = list(reader)
+
+    # Define the new columns
+    score_col = f"{translated_col}_score"
+    
+    # Ensure new columns are in the fieldnames list
+    if translated_col not in fieldnames:
+        fieldnames.append(translated_col)
+    if score_col not in fieldnames:
+        fieldnames.append(score_col)
+
+    for i, row in enumerate(rows):
+        # Safety: Clean up any dictionary keys that aren't strings
+        # This prevents the 'ValueError: ... None' crash
+        keys_to_fix = [k for k in row.keys() if k is None or k == 'extra_cols']
+        for k in keys_to_fix:
+            del row[k]
+
+        legacy_code = row.get(legacy_col, '')
+        
+        if not legacy_code:
+            row[translated_col] = ''
+            row[score_col] = ''
+            continue
+
+        print(f"  [{i+1}/{len(rows)}] Translating for {translated_col}...")
+        translated_code = translate_code(legacy_code)
+        
+        row[translated_col] = translated_code
+        row[score_col] = ""
+
+    # Write back using the same semicolon delimiter
+    with open(output_file, 'w', newline='', encoding='utf-8') as outfile:
+        writer = csv.DictWriter(outfile, fieldnames=fieldnames, delimiter=';', extrasaction='ignore')
+        writer.writeheader()
+        writer.writerows(rows)
+    
+    print(f"Successfully updated {output_file}")
 
 
 if __name__ == "__main__":
