@@ -15,15 +15,13 @@ You are given Fortran 77 code that may contain ESOPE extensions.
 ESOPE is an extension of Fortran designed for structured memory management, based on the concept of segments (SEGMENT, SEGINI, SEGACT, SEGDES, SEGSUP, SEGADJ, etc.) and pointers (POINTEUR).
 The goal is to translate this legacy ESOPE-Fortran code into modern Fortran (Fortran 2008).
 You must follow the strict translation rules and patterns demonstrated in the examples below.
-
 Translation Rules
 1. Module and Procedure Structure
 Module Creation: A standalone SUBROUTINE or FUNCTION (e.g., subroutine newbk) must be converted into a MODULE(e.g., module newbk_mod).
 Contains: The original procedure must be placed inside the CONTAINS section of the new module.
 Implicit Typing: IMPLICIT NONE must be enforced in all modules and procedures.
-
 2. Declarations and Dependencies
-external to use: An external <n> declaration (and its associated type declaration, e.g., integer fndbk) must be replaced with a USE statement (e.g., use :: fndbk_mod).
+external to use: An external <name> declaration (and its associated type declaration, e.g., integer fndbk) must be replaced with a USE statement (e.g., use :: fndbk_mod).
 POINTEUR:
 pointeur lib.PSTR → type(str), pointer :: lib
 pointeur <var>.<seg> → type(<seg>), pointer :: <var>
@@ -32,7 +30,6 @@ For POINTEUR arguments that are initialized or modified, intent(inout) is approp
 Includes:
 #include "PSTR.inc" → ! [ooo] empty #include PSTR.inc
 #include "tlib.seg" → Keep the include comments, but add local declarations for the segment's members (e.g., integer :: brcnt, integer :: urcnt).
-
 3. ESOPE Command and Syntax Translation
 Pointer Access: Convert ESOPE dot-notation to standard Fortran percent-notation.
 lb.bref → lb % bref
@@ -46,7 +43,6 @@ segini, ur → call segini(ur, ubbcnt)
 Memory Resizing (segadj): The segadj macro must also be translated to a call passing the new dimensioning variables.
 segadj, ur → call segadj(ur, ubbcnt)
 segadj, lb → call segadj(lb, brcnt, urcnt)
-
 4. Obsolete and Unused Code
 Obsolete Macros: All obsolete memory/state management macros must be commented out and tagged ! [ooo].obsolete:. This includes:
 call oooeta(...)
@@ -55,6 +51,7 @@ segact ...
 segdes ...
 call desstr(...)
 Unused Variables: If an ESOPE bookkeeping variable (like libeta) becomes unused after translation, mark its declaration with ! [ooo].not-used:.
+
 
 Example 1 ESOPE+Fortran:
 c arguments
@@ -90,6 +87,7 @@ contains
     ! [ooo] empty #include PSTR.inc
     ! external functions
 
+
 Example 3 ESOPE+Fortran:
 bk = mypnt(lib, lb.bref(ibk2))
 segact, bk
@@ -97,6 +95,7 @@ segact, bk
 Example 3 Fortran 2008:
 bk => book_mypnt(lib, lb % bref(ibk2))
 ! [ooo].obsolete: segact,bk
+
 
 Example 4 ESOPE+Fortran:
 brcnt = lb.bref(/1)
@@ -112,6 +111,7 @@ Example 5 Fortran 2008:
 title2 = bk % btitle
 ! [ooo].obsolete: segdes,bk
 
+
 Example 6 ESOPE+Fortran:
 ubbcnt = ur.ubb(/1)
 ubbcnt = ubbcnt + 1
@@ -123,6 +123,7 @@ ubbcnt = size(ur % ubb, 1)
 ubbcnt = ubbcnt + 1
 call segadj(ur, ubbcnt)
 ur % ubb(ubbcnt) = ibk
+
 
 Example 7 ESOPE+Fortran:
 c local variables    
@@ -144,10 +145,12 @@ Example 7 Fortran 2008:
     ! deactivate the structure if activated on entry
     ! [ooo].empty-var: if (libeta /= 1) ! [ooo].obsolete: call desstr(lib,'MOD')
 
+
 Example 8 ESOPE+Fortran:
 if (title2 .eq. title1) then
 Example 8 Fortran 2008:
 if (title2 == title1) then
+
 
 IMPORTANT: You must respond ONLY with valid JSON in this exact format:
 {
@@ -234,7 +237,7 @@ def extract_code_from_json(response_text):
     return response_text.strip()
 
 
-def translate_code(code_snippet, temperature=0.1, max_tokens=2048, max_retries=3, delay=1):
+def translate_code(code_snippet, temperature=0.1, max_tokens=2048, top_p=1.0, max_retries=3, delay=1):
     """
     Calls the vLLM API to translate a single code snippet.
     """
@@ -249,6 +252,7 @@ def translate_code(code_snippet, temperature=0.1, max_tokens=2048, max_retries=3
         ],
         "temperature": temperature,
         "max_tokens": max_tokens,
+        "top_p": top_p,
     }
 
     for attempt in range(max_retries):
@@ -273,9 +277,8 @@ def translate_code(code_snippet, temperature=0.1, max_tokens=2048, max_retries=3
             return f"Error: {str(e)}"
 
 
-
 def process_csv(input_file, output_file, legacy_col='legacy_code', 
-                translated_col='translated_code', temperature=0.1, max_tokens=2048):
+                translated_col='translated_code', temperature=0.1, max_tokens=2048, top_p=1.0):
     """
     Process CSV file with code translation.
     """
@@ -312,7 +315,8 @@ def process_csv(input_file, output_file, legacy_col='legacy_code',
         translated_code = translate_code(
             legacy_code, 
             temperature=temperature, 
-            max_tokens=max_tokens
+            max_tokens=max_tokens,
+            top_p=top_p
         )
         
         row[translated_col] = translated_code
@@ -324,10 +328,6 @@ def process_csv(input_file, output_file, legacy_col='legacy_code',
         writer.writerows(rows)
     
     print(f"Successfully updated {output_file}")
-
-
-
-
 
 
 if __name__ == "__main__":
@@ -344,6 +344,8 @@ if __name__ == "__main__":
                         help='Temperature for generation (default: 0.1)')
     parser.add_argument('--max-tokens', type=int, default=2048,
                         help='Maximum tokens for generation (default: 2048)')
+    parser.add_argument('--top-p', type=float, default=1.0,
+                        help='Top-p (nucleus sampling) for generation (default: 1.0)')
 
     args = parser.parse_args()
 
@@ -357,5 +359,6 @@ if __name__ == "__main__":
         args.legacy_col, 
         args.translated_col,
         args.temperature,
-        args.max_tokens
+        args.max_tokens,
+        args.top_p
     )

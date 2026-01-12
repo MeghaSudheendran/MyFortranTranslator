@@ -84,18 +84,7 @@ docker compose up -d
 # Your existing model loop code continues here...
 
 MODELS=(
-    	  "codellama/CodeLlama-7b-Instruct-hf"
-	  "codellama/CodeLlama-13b-Instruct-hf"
-       	  "mistralai/Mistral-7B-Instruct-v0.3"
-          "Qwen/Qwen2-7B-Instruct"
-	  "Qwen/Qwen2.5-Coder-3B"
-	  "Qwen/Qwen2.5-Coder-7B-Instruct"
-	  "Qwen/Qwen2.5-Coder-7B"
-	  "Qwen/Qwen2.5-Coder-14B-Instruct"
-	  "Qwen/Qwen2.5-Coder-14B"
-	  "Qwen/Qwen3-Coder-30B-A3B-Instruct"
-	  "Qwen/Qwen2.5-Coder-32B-Instruct"
-	  "Qwen/Qwen2.5-Coder-32B"
+          "bigcode/starcoder2-15b-instruct-v0.1"
 )
 
 TP_SIZE=4
@@ -188,9 +177,13 @@ EOF
 
     # We call the script directly or via make.
     # Passing the same file to input and output allows the Python script to update it.
-    python3 translate_fortran.py "$FINAL_RESULTS" "$FINAL_RESULTS" \
-        --legacy-col "legacy_code" \
-        --translated-col "$COL_NAME"
+    
+python3 translate_fortran_json_response.py "$FINAL_RESULTS" "$FINAL_RESULTS" \
+    --legacy-col "legacy_code" \
+    --translated-col "$COL_NAME" \
+    --temperature 0.0 \
+    --max-tokens 2048 \
+    --top-p 0.8
 
     echo "Finished $MODEL_ID. Updated $FINAL_RESULTS"
 
