@@ -84,7 +84,11 @@ docker compose up -d
 # Your existing model loop code continues here...
 
 MODELS=(
-          "bigcode/starcoder2-15b-instruct-v0.1"
+	"codellama/CodeLlama-34b-Instruct-hf"
+	"mistralai/Mistral-7B-Instruct-v0.3"
+ 	"Qwen/Qwen2.5-Coder-32B-Instruct"
+ 	"deepseek-ai/deepseek-coder-33b-instruct"
+
 )
 
 TP_SIZE=4
@@ -183,7 +187,7 @@ python3 translate_fortran_json_response.py "$FINAL_RESULTS" "$FINAL_RESULTS" \
     --translated-col "$COL_NAME" \
     --temperature 0.0 \
     --max-tokens 2048 \
-    --top-p 0.8
+    --top-p 1.0
 
     echo "Finished $MODEL_ID. Updated $FINAL_RESULTS"
 

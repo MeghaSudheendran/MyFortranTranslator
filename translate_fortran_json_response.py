@@ -6,6 +6,7 @@ import os
 import json
 import re
 
+
 # --- Configuration ---
 API_URL = os.getenv("API_URL", "http://localhost:8000/v1/chat/completions")
 MODEL = os.getenv("MODEL_ID", "")
@@ -224,6 +225,7 @@ def extract_code_from_json(response_text):
         return code_matches[0].strip()
     
     # Method 6: Strip JSON wrapper manually
+
     if response_text.startswith('{'):
         cleaned = re.sub(r'^\s*\{\s*"translated_code"\s*:\s*"', '', response_text)
         cleaned = re.sub(r'"\s*\}\s*$', '', cleaned)
@@ -235,6 +237,7 @@ def extract_code_from_json(response_text):
     
     # Last resort
     return response_text.strip()
+
 
 
 def translate_code(code_snippet, temperature=0.1, max_tokens=2048, top_p=1.0, max_retries=3, delay=1):
@@ -275,6 +278,8 @@ def translate_code(code_snippet, temperature=0.1, max_tokens=2048, top_p=1.0, ma
         except Exception as e:
             print(f"Unexpected error: {e}")
             return f"Error: {str(e)}"
+
+
 
 
 def process_csv(input_file, output_file, legacy_col='legacy_code', 
