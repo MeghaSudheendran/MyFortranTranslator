@@ -84,14 +84,10 @@ docker compose up -d
 # Your existing model loop code continues here...
 
 MODELS=(
-	"codellama/CodeLlama-34b-Instruct-hf"
-	"mistralai/Mistral-7B-Instruct-v0.3"
- 	"Qwen/Qwen2.5-Coder-32B-Instruct"
- 	"deepseek-ai/deepseek-coder-33b-instruct"
-
+"microsoft/phi-4"
 )
 
-TP_SIZE=4
+TP_SIZE=2
 MAX_LEN=8192
 INPUT_CSV="input.csv"
 FINAL_RESULTS="final_experiment_results.csv"

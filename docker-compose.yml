@@ -12,10 +12,10 @@ services:
     ports:
       - "8000:8000"
     command: [
-      "--model", "${MODEL_ID}",
-      "--tensor-parallel-size", "${TP_SIZE}",
-      "--max-model-len", "${MAX_LEN}"
-    ]
+	"--model", "${MODEL_ID}",
+	"--tensor-parallel-size", "${TP_SIZE}",
+	"--max-model-len", "${MAX_LEN}"
+	]
     deploy:
       resources:
         reservations:
