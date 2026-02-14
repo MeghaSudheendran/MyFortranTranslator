@@ -1,3 +1,4 @@
+
 ############################################
 # STEP 1: Grid'5000 NVIDIA Docker setup
 ############################################
@@ -84,8 +85,15 @@ docker compose up -d
 # Your existing model loop code continues here...
 
 MODELS=(
-"microsoft/phi-4"
+"Qwen/Qwen2.5-Coder-32B"
+"Qwen/Qwen2.5-Coder-32B-Instruct"
+"Qwen/Qwen2-7B-Instruct" 
+"codellama/CodeLlama-34b-Instruct-hf"
+"mistralai/Mistral-7B-Instruct-v0.3"
+"deepseek-ai/deepseek-coder-33b-instruct"
+"deepseek-ai/DeepSeek-Coder-V2-Lite-Base"
 )
+
 
 TP_SIZE=2
 MAX_LEN=8192
