@@ -85,18 +85,12 @@ docker compose up -d
 # Your existing model loop code continues here...
 
 MODELS=(
-"Qwen/Qwen2.5-Coder-32B"
 "Qwen/Qwen2.5-Coder-32B-Instruct"
-"Qwen/Qwen2-7B-Instruct" 
-"codellama/CodeLlama-34b-Instruct-hf"
-"mistralai/Mistral-7B-Instruct-v0.3"
-"deepseek-ai/deepseek-coder-33b-instruct"
-"deepseek-ai/DeepSeek-Coder-V2-Lite-Base"
 )
 
 
-TP_SIZE=2
-MAX_LEN=8192
+TP_SIZE=4
+MAX_LEN=32768
 INPUT_CSV="input.csv"
 FINAL_RESULTS="final_experiment_results.csv"
 
@@ -190,7 +184,7 @@ python3 translate_fortran_json_response.py "$FINAL_RESULTS" "$FINAL_RESULTS" \
     --legacy-col "legacy_code" \
     --translated-col "$COL_NAME" \
     --temperature 0.0 \
-    --max-tokens 2048 \
+    --max-tokens 4096 \
     --top-p 1.0
 
     echo "Finished $MODEL_ID. Updated $FINAL_RESULTS"
